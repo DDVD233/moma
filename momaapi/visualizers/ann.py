@@ -1,4 +1,6 @@
 from collections import defaultdict
+
+import torch
 from distinctipy import distinctipy
 import glob
 import math
@@ -11,7 +13,9 @@ import PIL.ImageFont as ImageFont
 import pygraphviz as pgv
 import shutil
 import tempfile
-from torchvision import io
+from torchvision import io, transforms
+import cv2
+import numpy
 
 from .timeline import TimelineVisualizer
 from ..utils import supress_stdout
@@ -50,7 +54,7 @@ class AnnVisualizer:
         }
         return palette
 
-    def _draw_bbox(self, ann_hoi, palette):
+    def _draw_bbox(self, ann_hoi, palette, entity_id=None, draw_text=True):
         path_image = self.moma.get_paths(ids_hoi=[ann_hoi.id])[0]
         image = io.read_image(path_image).permute(1, 2, 0).numpy()
         image = Image.fromarray(image).convert("RGBA")
@@ -66,6 +70,8 @@ class AnnVisualizer:
         font = ImageFont.truetype(path_font, int(max(image.size) * 0.02))
 
         for entity in ann_hoi.actors + ann_hoi.objects:
+            if entity_id is not None and entity.id != entity_id:
+                continue
             y1, x1, y2, x2 = (
                 entity.bbox.y1,
                 entity.bbox.x1,
@@ -76,22 +82,24 @@ class AnnVisualizer:
             draw.rectangle(
                 ((x1, y1), (x2, y2)), width=width_line, outline=palette[entity.id][0]
             )
-            draw.rectangle(
-                (
-                    (x1, y1),
+
+            if draw_text:
+                draw.rectangle(
                     (
-                        x1 + width_text + 2 * width_line,
-                        y1 + height_text + 2 * width_line,
+                        (x1, y1),
+                        (
+                            x1 + width_text + 2 * width_line,
+                            y1 + height_text + 2 * width_line,
+                        ),
                     ),
-                ),
-                fill=palette[entity.id][0],
-            )
-            draw.text(
-                (x1 + width_line, y1 + width_line),
-                entity.cname,
-                fill=palette[entity.id][1],
-                font=font,
-            )
+                    fill=palette[entity.id][0],
+                )
+                draw.text(
+                    (x1 + width_line, y1 + width_line),
+                    entity.cname,
+                    fill=palette[entity.id][1],
+                    font=font,
+                )
 
         image.paste(Image.alpha_composite(image, overlay))
 
@@ -202,6 +210,37 @@ class AnnVisualizer:
         image_graph.close()
 
         return path_hoi
+
+    def draw_bbox(self, id_act, id_entity, id_sact):
+        new_filename = f"boxes/{id_act}_{id_entity}.mp4"
+        path_sact = osp.join(self.dir_vis, new_filename)
+
+        if osp.isfile(path_sact):
+            return new_filename
+
+        os.makedirs(osp.join(self.dir_vis, "boxes"), exist_ok=True)
+
+        # ann_act = self.moma.get_anns_act(ids_act=[id_act])[0]
+        ann_sact = self.moma.get_anns_sact(ids_sact=[id_sact])[0]
+        ids_hoi = self.moma.get_ids_hoi(ids_act=[id_act])
+        palette = self._get_palette(ann_sact.ids_actor + ann_sact.ids_object)
+        frames = []
+
+        """ bbox """
+        for i, id_hoi in enumerate(ids_hoi):
+            ann_hoi = self.moma.get_anns_hoi(ids_hoi=[id_hoi])[0]
+            frame_id_sact = self.moma.get_ids_sact(ids_hoi=[id_hoi])[0]
+            # frame_id_entity = id_entity
+            # if frame_id_sact != id_sact:
+            #     frame_id_entity = "ZZZZ"  # dummy, does not draw any box
+            image = self._draw_bbox(ann_hoi, palette, entity_id=id_entity, draw_text=False)
+            frames.append(image)
+
+        # save to mp4
+        tensor_image = torch.stack([torch.from_numpy(numpy.array(frame)) for frame in frames])
+        io.write_video(path_sact, tensor_image, fps=2)
+        return new_filename
+
 
     @supress_stdout
     def show_sact(self, id_sact, vstack=True):
