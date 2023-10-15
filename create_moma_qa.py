@@ -1,6 +1,6 @@
 from momaapi import MOMA, AnnVisualizer
 from tqdm import tqdm
-import json
+import ujson as json
 import os
 from collections import defaultdict
 from momaapi.visualizers import AnnVisualizer
@@ -36,7 +36,8 @@ def create_moma_qa(split):
     basic_count = 0
     question_count = 0
     bbox_question_count = 0
-    visualizer = AnnVisualizer(moma, dir_vis=dir_moma)
+    dir_vis = os.path.join(dir_moma, 'videos')
+    visualizer = AnnVisualizer(moma, dir_vis=dir_vis)
 
     for act in tqdm(train_act_anns):
         sact_ids = act.ids_sact
@@ -76,7 +77,7 @@ def create_moma_qa(split):
                         "question": actor_question,
                         "question_id": question_count,
                         "answer": str(num_actors),
-                        "filename": video_metadata.fname,
+                        "filename": f"raw/{video_metadata.fname}",
                         "video_id": video_id,
                         "height": video_metadata.height,
                         "width": video_metadata.width,
@@ -93,8 +94,8 @@ def create_moma_qa(split):
                     # If answer id is number->object, else->actor
                     assert isinstance(rel.id_trg, str)
 
-                    video_filename = video_metadata.fname
-                    this_video_id = video_id
+                    video_filename = f"raw/{video_metadata.fname}"
+                    this_video_id = video_filename.replace('.mp4', '')
                     description_for_sact = make_sact_descriptions(ann_hoi, things_to_name)
 
                     # Draw the bbox for the source node if it is indistinguishable
@@ -116,6 +117,9 @@ def create_moma_qa(split):
                     question = question.replace(" [trg]", f"")
                     question = f"When {caption} for the {caption_ordinal} time, {question}?"
                     answer = things_to_name[rel.id_trg].cname
+
+                    if answer == "unsure":
+                        continue
 
                     sgg_question = '. '.join(description_for_sact) + f". {question}"
                     annotation = {
@@ -183,16 +187,14 @@ def make_sact_descriptions(ann_hoi, things_to_name, highlight_target=None):
 
 
 if __name__ == "__main__":
-    annotations_train, descriptions_train = create_moma_qa(split="train")
-    annotations_val, descriptions_val = create_moma_qa(split="val")
-    annotations_test, descriptions_test = create_moma_qa(split="test")
-    annotations_all = annotations_train + annotations_val + annotations_test
-    descriptions_train.update(descriptions_val)
-    descriptions_train.update(descriptions_test)
-    
     save_path = '/home/data/datasets/moma_qa/'
+    annotations_train = create_moma_qa(split="train")
     with open(os.path.join(save_path, 'train.json'), 'w') as f:
         json.dump(annotations_train, f)
+    annotations_val = create_moma_qa(split="val")
+    annotations_test = create_moma_qa(split="test")
+    annotations_all = annotations_train + annotations_val + annotations_test
+
     with open(os.path.join(save_path, 'val.json'), 'w') as f:
         json.dump(annotations_val, f)
     with open(os.path.join(save_path, 'test.json'), 'w') as f:
@@ -200,5 +202,3 @@ if __name__ == "__main__":
 
     with open(os.path.join(save_path, 'all.json'), "w") as f:
         json.dump(annotations_all, f)
-    with open(os.path.join(save_path, 'sg_descriptions.json'), "w") as f:
-        json.dump(descriptions_train, f)
