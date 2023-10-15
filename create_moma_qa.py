@@ -78,7 +78,7 @@ def create_moma_qa(split):
                         "question_id": question_count,
                         "answer": str(num_actors),
                         "filename": f"raw/{video_metadata.fname}",
-                        "video_id": video_id,
+                        "video_id": f"raw/{video_id}",
                         "height": video_metadata.height,
                         "width": video_metadata.width,
                         "num_frames": video_metadata.num_frames,
