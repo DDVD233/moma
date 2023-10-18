@@ -211,11 +211,11 @@ class AnnVisualizer:
 
         return path_hoi
 
-    def draw_bbox(self, id_act, id_entity, id_sact):
+    def draw_bbox(self, id_act, id_entity, id_sact, duration, overwrite=False):
         new_filename = f"boxes/{id_act}_{id_entity}.mp4"
         path_sact = osp.join(self.dir_vis, new_filename)
 
-        if osp.isfile(path_sact):
+        if osp.isfile(path_sact) and not overwrite:
             return new_filename
 
         os.makedirs(osp.join(self.dir_vis, "boxes"), exist_ok=True)
@@ -238,7 +238,8 @@ class AnnVisualizer:
 
         # save to mp4
         tensor_image = torch.stack([torch.from_numpy(numpy.array(frame)) for frame in frames])
-        io.write_video(path_sact, tensor_image, fps=2)
+        fps = len(frames) / duration
+        io.write_video(path_sact, tensor_image, fps=fps, options={'g': '10'})
         return new_filename
 
 

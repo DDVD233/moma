@@ -78,13 +78,15 @@ def create_moma_qa(split):
                         "question_id": question_count,
                         "answer": str(num_actors),
                         "filename": f"raw/{video_metadata.fname}",
+                        "video": f"raw/{video_metadata.fname}",
                         "video_id": f"raw/{video_id}",
                         "height": video_metadata.height,
                         "width": video_metadata.width,
                         "num_frames": video_metadata.num_frames,
                         "sact_start": sact.start,
                         "sact_end": sact.end,
-                        "sgg_question": actor_question
+                        "sgg_question": actor_question,
+                        "duration": int(video_metadata.duration)
                     })
                     question_count += 1
                     question_to_index[actor_question] = len(annotations) - 1
@@ -103,7 +105,8 @@ def create_moma_qa(split):
                     this_node_description = make_node_description(ann_hoi, source_node)
                     if node_descriptions.count(this_node_description) > 1:
                         # This node is indistinguishable for the question
-                        video_filename = visualizer.draw_bbox(id_act=act.id, id_entity=rel.id_src, id_sact=sact.id)
+                        video_filename = visualizer.draw_bbox(id_act=act.id, id_entity=rel.id_src, id_sact=sact.id,
+                                                              duration=video_metadata.duration)
                         this_video_id = video_filename.replace('.mp4', '')
                         anonymized_name = "person" if source_node.kind == "actor" else "object"
                         this_node_description = f"highlighted {anonymized_name}"
@@ -112,32 +115,39 @@ def create_moma_qa(split):
                         bbox_question_count += 1
 
                     # QA part
-                    interrog_word = "what" if rel.id_trg.isnumeric() else "who"
+                    interrog_word = "What" if rel.id_trg.isnumeric() else "Who"
                     question = question.replace("[src]", f"{interrog_word} is the {this_node_description}")
                     question = question.replace(" [trg]", f"")
                     question = f"When {caption} for the {caption_ordinal} time, {question}?"
                     answer = things_to_name[rel.id_trg].cname
 
+                    question = question.replace("unclassified ", "")
+                    answer = answer.replace("unclassified ", "")
+
                     if answer == "unsure":
                         continue
 
                     sgg_question = '. '.join(description_for_sact) + f". {question}"
+                    sgg_question = sgg_question.replace("unclassified ", "")
                     annotation = {
                         "question": question,
                         "question_id": question_count,
                         "answer": answer,
                         "filename": video_filename,
+                        "video": video_filename,
                         "video_id": this_video_id,
                         "height": video_metadata.height,
                         "width": video_metadata.width,
                         "num_frames": video_metadata.num_frames,
                         "sact_start": sact.start,
                         "sact_end": sact.end,
-                        "sgg_question": sgg_question
+                        "sgg_question": sgg_question,
+                        "duration": int(video_metadata.duration)
                     }
                     annotations.append(annotation)
                     question_to_index[question] = len(annotations) - 1
                     rel_count += 1
+                    question_count += 1
 
     print(f"Total number of annotations: {len(annotations)}")
     print(f"Total number of sacts: {sact_count}")
